@@ -96,13 +96,26 @@ export default function App() {
 
     setAnalyzing(true);
     try {
-      // Use the AI analysis service
-      const nutritionData = await analyzeFoodImage(image, 'MOCK'); // Change to 'OPENAI', 'GOOGLE_VISION', etc. for real AI
+      // Use the AI analysis service (change to 'MOCK' for testing without API key)
+      const nutritionData = await analyzeFoodImage(image, 'OPENAI');
       setNutritionData(nutritionData);
       saveToHistory(nutritionData);
     } catch (error) {
-      Alert.alert('Analysis Failed', 'Failed to analyze the image. Please try again.');
       console.error('Analysis error:', error);
+      
+      // Provide helpful error messages
+      let errorMessage = 'Failed to analyze the image. Please try again.';
+      if (error.message.includes('API key not configured')) {
+        errorMessage = 'OpenAI API key not configured.\n\n1. Create a .env file in the project root\n2. Add: EXPO_PUBLIC_OPENAI_API_KEY=your-key\n3. Restart the Expo server';
+      } else if (error.message.includes('Invalid OpenAI API key')) {
+        errorMessage = 'Invalid OpenAI API key. Please check your API key in the .env file.';
+      } else if (error.message.includes('rate limit')) {
+        errorMessage = 'API rate limit exceeded. Please wait a moment and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Analysis Failed', errorMessage);
     } finally {
       setAnalyzing(false);
     }

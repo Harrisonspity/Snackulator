@@ -6,9 +6,9 @@ export const AI_SERVICES = {
   OPENAI: {
     name: 'OpenAI GPT-4 Vision',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key-here',
-    model: 'gpt-4-vision-preview',
-    maxTokens: 500,
+    apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || 'your-openai-api-key-here',
+    model: 'gpt-4o-mini',
+    maxTokens: 1000,
   },
   
   // Google Cloud Vision API
@@ -39,18 +39,31 @@ export const DEFAULT_SERVICE = 'OPENAI';
 
 // Nutrition analysis prompt for OpenAI
 export const NUTRITION_PROMPT = `
-Analyze this food image and provide detailed nutritional information in JSON format.
-Include the following fields:
-- foodName: The name of the food item
-- calories: Number of calories (integer)
-- protein: Protein content in grams with "g" suffix
-- carbs: Carbohydrate content in grams with "g" suffix
-- fat: Fat content in grams with "g" suffix
-- fiber: Fiber content in grams with "g" suffix
-- sugar: Sugar content in grams with "g" suffix
-- confidence: Confidence level (0.0 to 1.0)
+You are a nutrition expert AI. Analyze this food image and provide accurate nutritional information based on typical serving sizes.
 
-Return only valid JSON without any additional text or formatting.
+First, identify what food(s) are shown in the image. Consider portion size based on visual cues (plate size, utensils, etc).
+
+Provide the nutritional information in this exact JSON format:
+{
+  "foodName": "specific name of the food item(s)",
+  "calories": estimated calories as integer,
+  "protein": "Xg" where X is grams of protein,
+  "carbs": "Xg" where X is grams of carbohydrates,
+  "fat": "Xg" where X is grams of fat,
+  "fiber": "Xg" where X is grams of fiber,
+  "sugar": "Xg" where X is grams of sugar,
+  "confidence": 0.0 to 1.0 based on image clarity
+}
+
+Guidelines:
+- Estimate based on typical restaurant/home serving sizes
+- If multiple foods are visible, provide combined totals
+- Use standard nutritional databases as reference
+- Be conservative in estimates rather than overestimating
+- Return ONLY the JSON object, no other text
+
+Example response for a medium apple:
+{"foodName":"Medium Apple","calories":95,"protein":"0.5g","carbs":"25g","fat":"0.3g","fiber":"4g","sugar":"19g","confidence":0.9}
 `;
 
 // Mock data for demonstration purposes

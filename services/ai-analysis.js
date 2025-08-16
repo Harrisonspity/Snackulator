@@ -27,6 +27,11 @@ const analyzeWithOpenAI = async (imageUri) => {
     const base64Image = await imageToBase64(imageUri);
     const config = AI_SERVICES.OPENAI;
     
+    // Check if API key is configured
+    if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
+      throw new Error('OpenAI API key not configured. Please add EXPO_PUBLIC_OPENAI_API_KEY to your .env file');
+    }
+    
     const response = await axios.post(
       config.baseUrl,
       {
@@ -43,6 +48,7 @@ const analyzeWithOpenAI = async (imageUri) => {
                 type: 'image_url',
                 image_url: {
                   url: `data:image/jpeg;base64,${base64Image}`,
+                  detail: 'high'
                 },
               },
             ],
@@ -59,10 +65,20 @@ const analyzeWithOpenAI = async (imageUri) => {
     );
 
     const content = response.data.choices[0].message.content;
-    return JSON.parse(content);
+    // Clean the response in case there's any markdown formatting
+    const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleanedContent);
   } catch (error) {
-    console.error('OpenAI analysis error:', error);
-    throw new Error('Failed to analyze image with OpenAI');
+    console.error('OpenAI analysis error:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      throw new Error('Invalid OpenAI API key. Please check your API key in the .env file');
+    } else if (error.response?.status === 429) {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later');
+    } else if (error.message.includes('API key not configured')) {
+      throw error;
+    } else {
+      throw new Error(`Failed to analyze image: ${error.message}`);
+    }
   }
 };
 
