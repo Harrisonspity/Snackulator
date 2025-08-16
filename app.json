@@ -2,6 +2,7 @@
   "expo": {
     "name": "nutrition-ai-analyzer",
     "slug": "nutrition-ai-analyzer",
+    "owner": "spitnale",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,7 +25,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.spitnalecasey.nutritionaianalyzer"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +35,9 @@
       "eas": {
         "projectId": "a3b1e4f4-8b64-412a-858a-61d0114cbc58"
       }
-    }
+    },
+    "plugins": [
+      "sentry-expo"
+    ]
   }
 }

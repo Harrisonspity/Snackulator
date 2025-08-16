@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +18,17 @@ import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button, Card, Title, Paragraph } from 'react-native-elements';
 import { analyzeFoodImage, getAvailableServices, validateApiKeys } from './services/ai-analysis';
+import * as Sentry from 'sentry-expo';
+
+// Initialize Sentry
+Sentry.init({
+  dsn: 'https://YOUR-DSN-HERE@sentry.io/YOUR-PROJECT-ID',
+  enableInExpoDevelopment: true,
+  debug: true, // Remove this in production
+  environment: __DEV__ ? 'development' : 'production',
+});
+
+const { width } = Dimensions.get('window');
 
 export default function App() {
   const [image, setImage] = useState(null);
@@ -23,12 +36,25 @@ export default function App() {
   const [nutritionData, setNutritionData] = useState(null);
   const [history, setHistory] = useState([]);
   const [hasPermission, setHasPermission] = useState(false);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
     (async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      setHasPermission(status === 'granted');
-      loadHistory();
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        setHasPermission(status === 'granted');
+        loadHistory();
+        
+        // Log app start to Sentry
+        Sentry.Native.captureMessage('App started successfully', 'info');
+      } catch (error) {
+        Sentry.Native.captureException(error);
+        console.error('Startup error:', error);
+      }
     })();
   }, []);
 
@@ -95,11 +121,41 @@ export default function App() {
     }
 
     setAnalyzing(true);
+    
+    // Start smooth loading animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
     try {
       // Use the AI analysis service (change to 'MOCK' for testing without API key)
       const nutritionData = await analyzeFoodImage(image, 'OPENAI');
       setNutritionData(nutritionData);
       saveToHistory(nutritionData);
+      
+      // Smooth reveal animation
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } catch (error) {
       console.error('Analysis error:', error);
       
@@ -224,7 +280,7 @@ export default function App() {
               name: 'image',
               type: 'feather',
               size: 20,
-              color: '#007AFF',
+              color: '#6C63FF',
             }}
           />
 
@@ -248,10 +304,13 @@ export default function App() {
         </View>
 
         {analyzing && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
+          <Animated.View style={[styles.loadingContainer, {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }]}>
+            <ActivityIndicator size="large" color="#6C63FF" />
             <Text style={styles.loadingText}>Analyzing your food...</Text>
-          </View>
+          </Animated.View>
         )}
 
         {renderNutritionCard()}
@@ -270,24 +329,27 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F7F9FC',
   },
   header: {
-    backgroundColor: '#007AFF',
-    paddingTop: 20,
-    paddingBottom: 20,
+    backgroundColor: 'transparent',
+    paddingTop: 25,
+    paddingBottom: 25,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#2C3E50',
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 15,
+    color: '#7F8C8D',
+    fontWeight: '400',
+    letterSpacing: 0.3,
   },
   content: {
     flex: 1,
@@ -295,139 +357,186 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
   },
   previewImage: {
-    width: 300,
-    height: 225,
-    borderRadius: 15,
-    marginBottom: 10,
+    width: width - 60,
+    height: (width - 60) * 0.75,
+    borderRadius: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   clearButton: {
-    backgroundColor: '#ff3b30',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: '#FFE5E5',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 25,
   },
   clearButtonText: {
-    color: 'white',
+    color: '#FF6B6B',
     fontWeight: '600',
+    fontSize: 14,
   },
   buttonContainer: {
-    marginBottom: 20,
+    marginBottom: 25,
+    paddingHorizontal: 10,
   },
   primaryButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 25,
-    paddingVertical: 12,
-    marginBottom: 10,
+    backgroundColor: '#6C63FF',
+    borderRadius: 30,
+    paddingVertical: 16,
+    marginBottom: 12,
+    shadowColor: '#6C63FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   secondaryButton: {
-    backgroundColor: 'white',
-    borderRadius: 25,
-    paddingVertical: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#007AFF',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    paddingVertical: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#E8E8F5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   analyzeButton: {
-    backgroundColor: '#34C759',
-    borderRadius: 25,
-    paddingVertical: 12,
-    marginBottom: 10,
+    backgroundColor: '#4ECDC4',
+    borderRadius: 30,
+    paddingVertical: 16,
+    marginBottom: 12,
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: '#6C63FF',
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 30,
+    padding: 20,
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    marginTop: 15,
+    fontSize: 15,
+    color: '#95A5A6',
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   nutritionCard: {
-    borderRadius: 15,
-    marginBottom: 20,
-    elevation: 3,
+    borderRadius: 20,
+    marginBottom: 25,
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 15,
+    elevation: 5,
   },
   cardTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#2C3E50',
+    letterSpacing: 0.3,
   },
   nutritionContent: {
     alignItems: 'center',
+    padding: 5,
   },
   foodName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 5,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#6C63FF',
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   confidence: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
+    color: '#95A5A6',
+    marginBottom: 20,
+    fontWeight: '500',
   },
   nutritionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     width: '100%',
+    paddingHorizontal: 5,
   },
   nutritionItem: {
     width: '48%',
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    backgroundColor: '#F8F9FB',
+    padding: 18,
+    borderRadius: 16,
+    marginBottom: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E8EEF2',
   },
   nutritionLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
+    fontSize: 13,
+    color: '#95A5A6',
+    marginBottom: 6,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   nutritionValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2C3E50',
   },
   historySection: {
-    marginTop: 20,
+    marginTop: 30,
+    paddingHorizontal: 5,
   },
   historyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#2C3E50',
+    marginBottom: 20,
+    letterSpacing: 0.3,
   },
   historyCard: {
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 10,
+    borderRadius: 16,
+    marginBottom: 12,
+    padding: 15,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   historyContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   historyImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
+    width: 65,
+    height: 65,
+    borderRadius: 12,
     marginRight: 15,
   },
   historyText: {
@@ -436,16 +545,19 @@ const styles = StyleSheet.create({
   historyFoodName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#2C3E50',
+    letterSpacing: 0.3,
   },
   historyCalories: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    color: '#6C63FF',
+    marginTop: 4,
+    fontWeight: '500',
   },
   historyDate: {
     fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    color: '#95A5A6',
+    marginTop: 4,
+    fontWeight: '400',
   },
 });
