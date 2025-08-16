@@ -17,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.spitnalecasey.nutritionaianalyzer",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select food images for nutritional analysis.",
+        "NSCameraUsageDescription": "This app needs access to your camera to take photos of food for nutritional analysis.",
+        "NSPhotoLibraryAddUsageDescription": "This app saves analyzed food images to your photo library for your records."
       }
     },
     "android": {
@@ -26,7 +29,12 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.spitnalecasey.nutritionaianalyzer"
+      "package": "com.spitnalecasey.nutritionaianalyzer",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,7 +45,27 @@
       }
     },
     "plugins": [
-      "sentry-expo"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photo library to select food images for nutritional analysis.",
+          "cameraPermission": "This app needs access to your camera to take photos of food for nutritional analysis."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "This app needs access to your camera to take photos of food for nutritional analysis."
+        }
+      ]
     ]
   }
 }

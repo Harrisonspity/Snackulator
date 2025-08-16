@@ -34,7 +34,7 @@ export default function App() {
   const [analysisProgress, setAnalysisProgress] = useState('');
   
   // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -67,16 +67,7 @@ export default function App() {
   const handleGetStarted = async () => {
     await AsyncStorage.setItem('hasSeenWelcome', 'true');
     setHasSeenWelcome(true);
-    
-    // Animate out welcome screen
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setShowWelcome(false);
-      fadeAnim.setValue(1);
-    });
+    setShowWelcome(false);
   };
 
   const requestCameraPermission = async () => {
@@ -228,8 +219,15 @@ export default function App() {
     try {
       setAnalysisProgress('Analyzing nutritional content...');
       
-      // Use MOCK service by default for demo
-      const nutritionData = await analyzeFoodImage(imageUri, 'MOCK');
+      // Try OpenAI Vision API first, fall back to mock if it fails
+      let nutritionData;
+      try {
+        nutritionData = await analyzeFoodImage(imageUri, 'OPENAI');
+      } catch (apiError) {
+        console.log('OpenAI API error, using mock data:', apiError.message);
+        // Fall back to mock data if API fails
+        nutritionData = await analyzeFoodImage(imageUri, 'MOCK');
+      }
       
       setAnalysisProgress('Processing results...');
       
@@ -288,7 +286,7 @@ export default function App() {
       transparent={false}
     >
       <SafeAreaView style={styles.welcomeContainer}>
-        <Animated.View style={[styles.welcomeContent, { opacity: fadeAnim }]}>
+        <View style={styles.welcomeContent}>
           <View style={styles.welcomeHeader}>
             <View style={styles.iconContainer}>
               <Ionicons name="nutrition" size={80} color="#007AFF" />
@@ -343,7 +341,7 @@ export default function App() {
               <Ionicons name="arrow-forward" size={20} color="white" />
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
       </SafeAreaView>
     </Modal>
   );

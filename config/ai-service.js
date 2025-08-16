@@ -7,7 +7,7 @@ export const AI_SERVICES = {
     name: 'OpenAI GPT-4 Vision',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
     apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || 'your-openai-api-key-here',
-    model: 'gpt-4o-mini',
+    model: 'gpt-4-turbo', // Using gpt-4-turbo for better image recognition
     maxTokens: 1000,
   },
   
@@ -39,9 +39,25 @@ export const DEFAULT_SERVICE = 'OPENAI';
 
 // Nutrition analysis prompt for OpenAI
 export const NUTRITION_PROMPT = `
-You are a nutrition expert AI. Analyze this food image and provide accurate nutritional information based on typical serving sizes.
+You are an expert nutritionist AI with advanced food recognition capabilities. Carefully analyze this food image step by step:
 
-First, identify what food(s) are shown in the image. Consider portion size based on visual cues (plate size, utensils, etc).
+1. IDENTIFY: Look closely at the image to identify the specific food item(s). Consider:
+   - Color, shape, and texture
+   - Cooking method (raw, cooked, fried, baked, etc.)
+   - Any visible ingredients or toppings
+   - Context clues (plate, packaging, utensils)
+
+2. ESTIMATE PORTION: Estimate the portion size based on:
+   - Visual cues in the image (plate size, hand/utensil for scale)
+   - Standard serving sizes for this type of food
+   - If uncertain, use typical restaurant or home serving sizes
+
+3. ANALYZE NUTRITION: Based on your identification and portion estimate, provide accurate nutritional data.
+
+IMPORTANT: Be very precise in food identification. For example:
+- A banana should be identified as "Banana", not "Apple" or "Pizza"
+- An apple should be identified as "Apple", not "Pizza"
+- A hot dog should be identified as "Hot Dog", not "Salad"
 
 Provide the nutritional information in this exact JSON format:
 {
