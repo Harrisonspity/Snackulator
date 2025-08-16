@@ -291,9 +291,9 @@ export default function App() {
             <View style={styles.iconContainer}>
               <Ionicons name="nutrition" size={80} color="#007AFF" />
             </View>
-            <Text style={styles.welcomeTitle}>Nutrition AI Analyzer</Text>
+            <Text style={styles.welcomeTitle}>Nutrition Analyzer</Text>
             <Text style={styles.welcomeSubtitle}>
-              Your Personal Food Analysis Assistant
+              Created by Harrison Spitnale
             </Text>
           </View>
 

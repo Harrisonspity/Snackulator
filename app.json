@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "nutrition-ai-analyzer",
-    "slug": "nutrition-ai-analyzer",
+    "name": "Nutrition Analyzer",
+    "slug": "nutrition-analyzer",
     "owner": "spitnale",
     "version": "1.0.0",
     "orientation": "portrait",
