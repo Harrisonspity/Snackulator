@@ -68,6 +68,10 @@ buck-out/
 dist/
 web-build/
 
+# Native folders (for CNG/Prebuild)
+/android
+/ios
+
 # Environment variables
 .env
 .env.local
