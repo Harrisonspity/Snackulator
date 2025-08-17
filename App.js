@@ -12,26 +12,57 @@ import {
   Animated,
   Dimensions,
   Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { analyzeFoodImage } from './services/ai-analysis';
+import { 
+  calculateDailyCalories, 
+  formatDateKey, 
+  getDisplayDate,
+  getCalorieGoal 
+} from './utils/calorieCalculator';
 
 const { width, height } = Dimensions.get('window');
 
 export default function App() {
+  // Onboarding states
   const [showWelcome, setShowWelcome] = useState(true);
-  const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  
+  // User profile
+  const [userProfile, setUserProfile] = useState({
+    name: '',
+    gender: '',
+    age: '',
+    weight: '',
+    heightFeet: '',
+    heightInches: '',
+    activityLevel: 'light',
+    goal: 'maintain'
+  });
+  
+  // Dashboard states
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'camera'
+  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
+  const [dailyCalories, setDailyCalories] = useState({});
+  const [dailyFoods, setDailyFoods] = useState({});
+  const [calorieGoal, setCalorieGoal] = useState(2000);
+  
+  // Camera/Analysis states
   const [image, setImage] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [nutritionData, setNutritionData] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [analysisProgress, setAnalysisProgress] = useState('');
   const [cameraPermission, setCameraPermission] = useState(null);
   const [galleryPermission, setGalleryPermission] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState('');
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -40,20 +71,41 @@ export default function App() {
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    checkFirstLaunch();
-    loadHistory();
-    checkPermissions();
+    initializeApp();
   }, []);
 
-  const checkFirstLaunch = async () => {
+  useEffect(() => {
+    if (userProfile.gender && userProfile.age && userProfile.weight && userProfile.heightFeet && userProfile.heightInches) {
+      // Convert feet and inches to total inches
+      const heightInInches = (parseInt(userProfile.heightFeet) * 12) + parseInt(userProfile.heightInches);
+      
+      const goal = calculateDailyCalories(
+        userProfile.gender,
+        parseInt(userProfile.age),
+        parseInt(userProfile.weight),
+        heightInInches,
+        userProfile.activityLevel
+      );
+      const adjustedGoal = getCalorieGoal(goal, userProfile.goal);
+      setCalorieGoal(adjustedGoal);
+    }
+  }, [userProfile]);
+
+  const initializeApp = async () => {
     try {
-      const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
-      if (hasSeenWelcome === 'true') {
-        setHasSeenWelcome(true);
+      // Check onboarding status
+      const hasCompleted = await AsyncStorage.getItem('hasCompletedOnboarding');
+      if (hasCompleted === 'true') {
+        setHasCompletedOnboarding(true);
         setShowWelcome(false);
+        setShowProfileSetup(false);
+        await loadUserProfile();
+        await loadDailyData();
       }
+      
+      checkPermissions();
     } catch (error) {
-      console.log('Error checking first launch:', error);
+      console.log('Error initializing app:', error);
     }
   };
 
@@ -64,63 +116,149 @@ export default function App() {
     setGalleryPermission(galleryStatus.status);
   };
 
-  const handleGetStarted = async () => {
-    await AsyncStorage.setItem('hasSeenWelcome', 'true');
-    setHasSeenWelcome(true);
+  const loadUserProfile = async () => {
+    try {
+      const profile = await AsyncStorage.getItem('userProfile');
+      if (profile) {
+        setUserProfile(JSON.parse(profile));
+      }
+    } catch (error) {
+      console.log('Error loading profile:', error);
+    }
+  };
+
+  const saveUserProfile = async () => {
+    try {
+      await AsyncStorage.setItem('userProfile', JSON.stringify(userProfile));
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      setHasCompletedOnboarding(true);
+      setShowProfileSetup(false);
+    } catch (error) {
+      console.log('Error saving profile:', error);
+    }
+  };
+
+  const loadDailyData = async () => {
+    try {
+      const calories = await AsyncStorage.getItem('dailyCalories');
+      const foods = await AsyncStorage.getItem('dailyFoods');
+      
+      if (calories) setDailyCalories(JSON.parse(calories));
+      if (foods) setDailyFoods(JSON.parse(foods));
+    } catch (error) {
+      console.log('Error loading daily data:', error);
+    }
+  };
+
+  const saveDailyData = async (calories, foods) => {
+    try {
+      await AsyncStorage.setItem('dailyCalories', JSON.stringify(calories));
+      await AsyncStorage.setItem('dailyFoods', JSON.stringify(foods));
+    } catch (error) {
+      console.log('Error saving daily data:', error);
+    }
+  };
+
+  const handleGetStarted = () => {
     setShowWelcome(false);
+    setShowProfileSetup(true);
+  };
+
+  const handleProfileComplete = () => {
+    if (!userProfile.gender || !userProfile.age || !userProfile.weight || !userProfile.heightFeet || !userProfile.heightInches) {
+      Alert.alert('Missing Information', 'Please fill in all fields');
+      return;
+    }
+    saveUserProfile();
+  };
+
+  const logFoodToDaily = () => {
+    if (!nutritionData) return;
+    
+    const today = formatDateKey(new Date());
+    
+    // Update daily calories
+    const updatedCalories = { ...dailyCalories };
+    updatedCalories[today] = (updatedCalories[today] || 0) + nutritionData.calories;
+    
+    // Update daily foods
+    const updatedFoods = { ...dailyFoods };
+    if (!updatedFoods[today]) updatedFoods[today] = [];
+    updatedFoods[today].push({
+      id: Date.now().toString(),
+      ...nutritionData,
+      timestamp: new Date().toISOString()
+    });
+    
+    setDailyCalories(updatedCalories);
+    setDailyFoods(updatedFoods);
+    saveDailyData(updatedCalories, updatedFoods);
+    
+    // Reset and go to dashboard
+    setImage(null);
+    setNutritionData(null);
+    setCurrentView('dashboard');
+    
+    Alert.alert('Success', `Added ${nutritionData.calories} calories to today's total!`);
+  };
+
+  const removeFoodFromDaily = (foodId) => {
+    const today = formatDateKey(new Date());
+    const todaysFoods = dailyFoods[today] || [];
+    const foodToRemove = todaysFoods.find(f => f.id === foodId);
+    
+    if (!foodToRemove) return;
+    
+    Alert.alert(
+      'Remove Food',
+      `Remove ${foodToRemove.foodName} (${foodToRemove.calories} cal)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            // Update calories
+            const updatedCalories = { ...dailyCalories };
+            updatedCalories[today] = Math.max(0, (updatedCalories[today] || 0) - foodToRemove.calories);
+            
+            // Update foods
+            const updatedFoods = { ...dailyFoods };
+            updatedFoods[today] = todaysFoods.filter(f => f.id !== foodId);
+            
+            setDailyCalories(updatedCalories);
+            setDailyFoods(updatedFoods);
+            saveDailyData(updatedCalories, updatedFoods);
+          }
+        }
+      ]
+    );
+  };
+
+  const changeDate = (direction) => {
+    const current = new Date(selectedDate + 'T00:00:00');
+    const newDate = new Date(current);
+    newDate.setDate(current.getDate() + direction);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Don't go beyond today
+    if (newDate > today) return;
+    
+    setSelectedDate(formatDateKey(newDate));
   };
 
   const requestCameraPermission = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     setCameraPermission(status);
-    if (status !== 'granted') {
-      Alert.alert(
-        'Camera Permission Required',
-        'To take photos of food for analysis, please enable camera access in your device settings.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => {} }
-        ]
-      );
-    }
     return status === 'granted';
   };
 
   const requestGalleryPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     setGalleryPermission(status);
-    if (status !== 'granted') {
-      Alert.alert(
-        'Photo Library Permission Required',
-        'To select photos from your library for analysis, please enable photo access in your device settings.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => {} }
-        ]
-      );
-    }
     return status === 'granted';
-  };
-
-  const loadHistory = async () => {
-    try {
-      const savedHistory = await AsyncStorage.getItem('nutritionHistory');
-      if (savedHistory) {
-        setHistory(JSON.parse(savedHistory));
-      }
-    } catch (error) {
-      console.log('Error loading history:', error);
-    }
-  };
-
-  const saveToHistory = async (newEntry) => {
-    try {
-      const updatedHistory = [newEntry, ...history.slice(0, 9)];
-      await AsyncStorage.setItem('nutritionHistory', JSON.stringify(updatedHistory));
-      setHistory(updatedHistory);
-    } catch (error) {
-      console.log('Error saving history:', error);
-    }
   };
 
   const pickImage = async () => {
@@ -140,8 +278,6 @@ export default function App() {
       if (!result.canceled && result.assets[0]) {
         setImage(result.assets[0].uri);
         setNutritionData(null);
-        
-        // Auto-analyze after selection
         setTimeout(() => {
           analyzeImage(result.assets[0].uri);
         }, 500);
@@ -167,8 +303,6 @@ export default function App() {
       if (!result.canceled && result.assets[0]) {
         setImage(result.assets[0].uri);
         setNutritionData(null);
-        
-        // Auto-analyze after capture
         setTimeout(() => {
           analyzeImage(result.assets[0].uri);
         }, 500);
@@ -179,112 +313,37 @@ export default function App() {
   };
 
   const analyzeImage = async (imageUri = image) => {
-    if (!imageUri) {
-      Alert.alert('No Image', 'Please select or take a photo first');
-      return;
-    }
+    if (!imageUri) return;
 
     setAnalyzing(true);
-    setAnalysisProgress('Preparing image...');
-    
-    // Start loading animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(progressAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(progressAnim, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ])
-      ),
-    ]).start();
+    setAnalysisProgress('Analyzing food...');
     
     try {
-      setAnalysisProgress('Analyzing nutritional content...');
-      
-      // Try OpenAI Vision API first, fall back to mock if it fails
       let nutritionData;
       try {
         nutritionData = await analyzeFoodImage(imageUri, 'OPENAI');
       } catch (apiError) {
-        console.log('OpenAI API error, using mock data:', apiError.message);
-        // Fall back to mock data if API fails
+        console.log('Using mock data:', apiError.message);
         nutritionData = await analyzeFoodImage(imageUri, 'MOCK');
       }
       
-      setAnalysisProgress('Processing results...');
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       setNutritionData(nutritionData);
-      saveToHistory(nutritionData);
-      
-      // Success animation
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      
       setAnalysisProgress('');
     } catch (error) {
-      console.error('Analysis error:', error);
-      
-      let errorMessage = 'Unable to analyze the image. Please try again.';
-      if (error.message.includes('API key')) {
-        errorMessage = 'API key not configured. Using mock data for demo.';
-      }
-      
-      Alert.alert('Analysis Notice', errorMessage);
-      setAnalysisProgress('');
+      Alert.alert('Analysis Failed', 'Unable to analyze the image. Please try again.');
     } finally {
       setAnalyzing(false);
-      progressAnim.stopAnimation();
     }
   };
 
   const clearImage = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setImage(null);
-      setNutritionData(null);
-      fadeAnim.setValue(1);
-    });
+    setImage(null);
+    setNutritionData(null);
   };
 
+  // Render Welcome Screen
   const renderWelcomeScreen = () => (
-    <Modal
-      visible={showWelcome}
-      animationType="fade"
-      transparent={false}
-    >
+    <Modal visible={showWelcome} animationType="fade" transparent={false}>
       <SafeAreaView style={styles.welcomeContainer}>
         <View style={styles.welcomeContent}>
           <View style={styles.welcomeHeader}>
@@ -301,206 +360,322 @@ export default function App() {
             <View style={styles.featureItem}>
               <Ionicons name="camera" size={30} color="#007AFF" />
               <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Snap or Select</Text>
+                <Text style={styles.featureTitle}>Snap & Track</Text>
                 <Text style={styles.featureDescription}>
-                  Take a photo or choose from your gallery
+                  Take photos to log calories instantly
                 </Text>
               </View>
             </View>
 
             <View style={styles.featureItem}>
-              <Ionicons name="analytics" size={30} color="#007AFF" />
+              <Ionicons name="trending-up" size={30} color="#007AFF" />
               <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>AI Analysis</Text>
+                <Text style={styles.featureTitle}>Daily Goals</Text>
                 <Text style={styles.featureDescription}>
-                  Get instant nutritional information
+                  Track calories against your personal goal
                 </Text>
               </View>
             </View>
 
             <View style={styles.featureItem}>
-              <Ionicons name="time" size={30} color="#007AFF" />
+              <Ionicons name="calendar" size={30} color="#007AFF" />
               <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Track History</Text>
+                <Text style={styles.featureTitle}>History</Text>
                 <Text style={styles.featureDescription}>
-                  Review your past food analyses
+                  View your daily calorie intake over time
                 </Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.welcomeFooter}>
-            <Text style={styles.permissionNote}>
-              We'll ask for camera and photo permissions to analyze your food
-            </Text>
-            <TouchableOpacity 
-              style={styles.getStartedButton}
-              onPress={handleGetStarted}
-            >
-              <Text style={styles.getStartedText}>Get Started</Text>
-              <Ionicons name="arrow-forward" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    </Modal>
-  );
-
-  const renderNutritionCard = () => {
-    if (!nutritionData) return null;
-
-    return (
-      <Animated.View style={[
-        styles.nutritionCard,
-        {
-          opacity: fadeAnim,
-          transform: [
-            { translateY: slideAnim },
-            { scale: scaleAnim }
-          ]
-        }
-      ]}>
-        <View style={styles.nutritionHeader}>
-          <Text style={styles.foodName}>{nutritionData.foodName}</Text>
-          <View style={styles.confidenceBadge}>
-            <Text style={styles.confidenceText}>
-              {(nutritionData.confidence * 100).toFixed(0)}% Match
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.nutritionGrid}>
-          <View style={[styles.nutritionItem, styles.caloriesItem]}>
-            <Text style={styles.nutritionLabel}>Calories</Text>
-            <Text style={styles.caloriesValue}>{nutritionData.calories}</Text>
-          </View>
-          
-          <View style={styles.macroRow}>
-            <View style={styles.nutritionItem}>
-              <Text style={styles.nutritionLabel}>Protein</Text>
-              <Text style={styles.nutritionValue}>{nutritionData.protein}</Text>
-            </View>
-            <View style={styles.nutritionItem}>
-              <Text style={styles.nutritionLabel}>Carbs</Text>
-              <Text style={styles.nutritionValue}>{nutritionData.carbs}</Text>
-            </View>
-            <View style={styles.nutritionItem}>
-              <Text style={styles.nutritionLabel}>Fat</Text>
-              <Text style={styles.nutritionValue}>{nutritionData.fat}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.microRow}>
-            <View style={styles.nutritionItem}>
-              <Text style={styles.nutritionLabel}>Fiber</Text>
-              <Text style={styles.nutritionValue}>{nutritionData.fiber}</Text>
-            </View>
-            <View style={styles.nutritionItem}>
-              <Text style={styles.nutritionLabel}>Sugar</Text>
-              <Text style={styles.nutritionValue}>{nutritionData.sugar}</Text>
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-    );
-  };
-
-  const renderHistoryModal = () => (
-    <Modal
-      visible={showHistory}
-      animationType="slide"
-      transparent={false}
-    >
-      <SafeAreaView style={styles.historyContainer}>
-        <View style={styles.historyHeader}>
-          <Text style={styles.historyTitle}>Analysis History</Text>
-          <TouchableOpacity
-            onPress={() => setShowHistory(false)}
-            style={styles.closeButton}
+          <TouchableOpacity 
+            style={styles.getStartedButton}
+            onPress={handleGetStarted}
           >
-            <Ionicons name="close" size={28} color="#007AFF" />
+            <Text style={styles.getStartedText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={20} color="white" />
           </TouchableOpacity>
         </View>
-        
-        <ScrollView style={styles.historyScroll}>
-          {history.length === 0 ? (
-            <View style={styles.emptyHistory}>
-              <Ionicons name="time-outline" size={50} color="#ccc" />
-              <Text style={styles.emptyHistoryText}>No history yet</Text>
-              <Text style={styles.emptyHistorySubtext}>
-                Your analyzed foods will appear here
-              </Text>
-            </View>
-          ) : (
-            history.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.historyCard}
-                onPress={() => {
-                  setImage(item.imageUri);
-                  setNutritionData(item);
-                  setShowHistory(false);
-                }}
-              >
-                <Image source={{ uri: item.imageUri }} style={styles.historyImage} />
-                <View style={styles.historyContent}>
-                  <Text style={styles.historyFoodName}>{item.foodName}</Text>
-                  <Text style={styles.historyCalories}>{item.calories} cal</Text>
-                  <Text style={styles.historyDate}>
-                    {new Date(item.timestamp).toLocaleDateString()}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ccc" />
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
 
-  const renderLoadingOverlay = () => {
-    if (!analyzing) return null;
+  // Render Profile Setup Screen
+  const renderProfileSetup = () => (
+    <Modal visible={showProfileSetup} animationType="slide" transparent={false}>
+      <SafeAreaView style={styles.profileContainer}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.profileContent}
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {hasCompletedOnboarding && (
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setShowProfileSetup(false)}
+              >
+                <Ionicons name="close" size={28} color="#333" />
+              </TouchableOpacity>
+            )}
+            <Text style={styles.profileTitle}>Let's Set Up Your Profile</Text>
+            <Text style={styles.profileSubtitle}>
+              We'll calculate your daily calorie goal
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Gender</Text>
+              <View style={styles.genderButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    userProfile.gender === 'male' && styles.genderButtonActive
+                  ]}
+                  onPress={() => setUserProfile({...userProfile, gender: 'male'})}
+                >
+                  <Ionicons 
+                    name="male" 
+                    size={24} 
+                    color={userProfile.gender === 'male' ? 'white' : '#007AFF'} 
+                  />
+                  <Text style={[
+                    styles.genderButtonText,
+                    userProfile.gender === 'male' && styles.genderButtonTextActive
+                  ]}>Male</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    userProfile.gender === 'female' && styles.genderButtonActive
+                  ]}
+                  onPress={() => setUserProfile({...userProfile, gender: 'female'})}
+                >
+                  <Ionicons 
+                    name="female" 
+                    size={24} 
+                    color={userProfile.gender === 'female' ? 'white' : '#FF69B4'} 
+                  />
+                  <Text style={[
+                    styles.genderButtonText,
+                    userProfile.gender === 'female' && styles.genderButtonTextActive
+                  ]}>Female</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Age</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter your age"
+                keyboardType="number-pad"
+                value={userProfile.age}
+                onChangeText={(text) => setUserProfile({...userProfile, age: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Weight (lbs)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter your weight"
+                keyboardType="number-pad"
+                value={userProfile.weight}
+                onChangeText={(text) => setUserProfile({...userProfile, weight: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Height</Text>
+              <View style={styles.heightContainer}>
+                <TextInput
+                  style={[styles.textInput, styles.heightInput]}
+                  placeholder="Feet"
+                  keyboardType="number-pad"
+                  value={userProfile.heightFeet}
+                  onChangeText={(text) => setUserProfile({...userProfile, heightFeet: text})}
+                />
+                <Text style={styles.heightSeparator}>ft</Text>
+                <TextInput
+                  style={[styles.textInput, styles.heightInput]}
+                  placeholder="Inches"
+                  keyboardType="number-pad"
+                  value={userProfile.heightInches}
+                  onChangeText={(text) => setUserProfile({...userProfile, heightInches: text})}
+                />
+                <Text style={styles.heightSeparator}>in</Text>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Activity Level</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {['sedentary', 'light', 'moderate', 'active', 'veryActive'].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.activityButton,
+                      userProfile.activityLevel === level && styles.activityButtonActive
+                    ]}
+                    onPress={() => setUserProfile({...userProfile, activityLevel: level})}
+                  >
+                    <Text style={[
+                      styles.activityButtonText,
+                      userProfile.activityLevel === level && styles.activityButtonTextActive
+                    ]}>
+                      {level.charAt(0).toUpperCase() + level.slice(1).replace('veryActive', 'Very Active')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Goal</Text>
+              <View style={styles.goalButtons}>
+                {['lose', 'maintain', 'gain'].map((goal) => (
+                  <TouchableOpacity
+                    key={goal}
+                    style={[
+                      styles.goalButton,
+                      userProfile.goal === goal && styles.goalButtonActive
+                    ]}
+                    onPress={() => setUserProfile({...userProfile, goal: goal})}
+                  >
+                    <Text style={[
+                      styles.goalButtonText,
+                      userProfile.goal === goal && styles.goalButtonTextActive
+                    ]}>
+                      {goal === 'lose' ? 'Lose Weight' : goal === 'maintain' ? 'Maintain' : 'Gain Weight'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.completeProfileButton}
+              onPress={handleProfileComplete}
+            >
+              <Text style={styles.completeProfileText}>Complete Profile</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+
+  // Render Dashboard
+  const renderDashboard = () => {
+    const todaysCalories = dailyCalories[selectedDate] || 0;
+    const todaysFoods = dailyFoods[selectedDate] || [];
+    const caloriesRemaining = calorieGoal - todaysCalories;
+    const progressPercentage = Math.min((todaysCalories / calorieGoal) * 100, 100);
 
     return (
-      <View style={styles.loadingOverlay}>
-        <View style={styles.loadingContent}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>{analysisProgress}</Text>
-          <View style={styles.progressBar}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                {
-                  transform: [{
-                    translateX: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-width * 0.7, 0]
-                    })
-                  }]
-                }
-              ]}
+      <View style={styles.dashboardContainer}>
+        <View style={styles.dashboardHeader}>
+          <TouchableOpacity onPress={() => changeDate(-1)}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          
+          <Text style={styles.dateText}>{getDisplayDate(selectedDate)}</Text>
+          
+          <TouchableOpacity 
+            onPress={() => changeDate(1)}
+            disabled={selectedDate === formatDateKey(new Date())}
+          >
+            <Ionicons 
+              name="chevron-forward" 
+              size={24} 
+              color={selectedDate === formatDateKey(new Date()) ? '#ccc' : '#007AFF'} 
             />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.calorieCard}>
+          <Text style={styles.calorieTitle}>Daily Summary</Text>
+          
+          <View style={styles.calorieCircle}>
+            <View style={styles.calorieCircleInner}>
+              <Text style={styles.calorieNumber}>{todaysCalories}</Text>
+              <Text style={styles.calorieLabel}>calories</Text>
+            </View>
+            <View style={[styles.progressRing, { 
+              transform: [{ rotate: '-90deg' }]
+            }]}>
+              <View style={[styles.progressFill, {
+                transform: [{ rotate: `${(progressPercentage * 3.6)}deg` }]
+              }]} />
+            </View>
+          </View>
+
+          <View style={styles.calorieStats}>
+            <View style={styles.calorieStat}>
+              <Text style={styles.statLabel}>Goal</Text>
+              <Text style={styles.statValue}>{calorieGoal}</Text>
+            </View>
+            <View style={styles.calorieStat}>
+              <Text style={styles.statLabel}>Remaining</Text>
+              <Text style={[styles.statValue, caloriesRemaining < 0 && styles.overCalories]}>
+                {Math.abs(caloriesRemaining)}
+              </Text>
+            </View>
           </View>
         </View>
+
+        <View style={styles.foodListContainer}>
+          <Text style={styles.foodListTitle}>Today's Foods</Text>
+          {todaysFoods.length === 0 ? (
+            <View style={styles.emptyFoodList}>
+              <Ionicons name="restaurant-outline" size={40} color="#ccc" />
+              <Text style={styles.emptyFoodText}>No foods logged yet</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={todaysFoods}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.foodItem}>
+                  <View style={styles.foodItemInfo}>
+                    <Text style={styles.foodItemName}>{item.foodName}</Text>
+                    <Text style={styles.foodItemCalories}>{item.calories} cal</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => removeFoodFromDaily(item.id)}
+                    style={styles.removeButton}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={styles.addFoodButton}
+          onPress={() => setCurrentView('camera')}
+        >
+          <Ionicons name="add-circle" size={24} color="white" />
+          <Text style={styles.addFoodButtonText}>Add Food</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      
-      {renderWelcomeScreen()}
-      
-      <View style={styles.header}>
-        <Text style={styles.title}>Snackulator</Text>
-        <TouchableOpacity
-          style={styles.historyButton}
-          onPress={() => setShowHistory(true)}
-        >
-          <Ionicons name="time-outline" size={24} color="#007AFF" />
+  // Render Camera View
+  const renderCameraView = () => (
+    <View style={styles.cameraContainer}>
+      <View style={styles.cameraHeader}>
+        <TouchableOpacity onPress={() => {
+          setCurrentView('dashboard');
+          clearImage();
+        }}>
+          <Ionicons name="arrow-back" size={24} color="#007AFF" />
         </TouchableOpacity>
+        <Text style={styles.cameraTitle}>Add Food</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView 
@@ -545,32 +720,92 @@ export default function App() {
               </TouchableOpacity>
             </View>
             
-            {!nutritionData && !analyzing && (
-              <TouchableOpacity
-                style={styles.analyzeButton}
-                onPress={() => analyzeImage()}
-              >
-                <Ionicons name="analytics" size={24} color="white" />
-                <Text style={styles.analyzeButtonText}>Analyze Food</Text>
-              </TouchableOpacity>
-            )}
-            
-            {nutritionData && renderNutritionCard()}
-            
             {nutritionData && (
-              <TouchableOpacity
-                style={styles.newAnalysisButton}
-                onPress={clearImage}
-              >
-                <Text style={styles.newAnalysisText}>New Analysis</Text>
-              </TouchableOpacity>
+              <View style={styles.nutritionCard}>
+                <View style={styles.nutritionHeader}>
+                  <Text style={styles.foodName}>{nutritionData.foodName}</Text>
+                  <View style={styles.confidenceBadge}>
+                    <Text style={styles.confidenceText}>
+                      {(nutritionData.confidence * 100).toFixed(0)}% Match
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.nutritionGrid}>
+                  <View style={[styles.nutritionItem, styles.caloriesItem]}>
+                    <Text style={styles.nutritionLabel}>Calories</Text>
+                    <Text style={styles.caloriesValue}>{nutritionData.calories}</Text>
+                  </View>
+                  
+                  <View style={styles.macroRow}>
+                    <View style={styles.nutritionItem}>
+                      <Text style={styles.nutritionLabel}>Protein</Text>
+                      <Text style={styles.nutritionValue}>{nutritionData.protein}</Text>
+                    </View>
+                    <View style={styles.nutritionItem}>
+                      <Text style={styles.nutritionLabel}>Carbs</Text>
+                      <Text style={styles.nutritionValue}>{nutritionData.carbs}</Text>
+                    </View>
+                    <View style={styles.nutritionItem}>
+                      <Text style={styles.nutritionLabel}>Fat</Text>
+                      <Text style={styles.nutritionValue}>{nutritionData.fat}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.logCaloriesButton}
+                  onPress={logFoodToDaily}
+                >
+                  <Ionicons name="add-circle-outline" size={24} color="white" />
+                  <Text style={styles.logCaloriesText}>Log to Daily Calories</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
       </ScrollView>
 
-      {renderHistoryModal()}
-      {renderLoadingOverlay()}
+      {analyzing && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>{analysisProgress}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
+  // Main render
+  if (!hasCompletedOnboarding) {
+    return (
+      <>
+        {renderWelcomeScreen()}
+        {renderProfileSetup()}
+      </>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="auto" />
+      
+      <View style={styles.header}>
+        <Text style={styles.title}>Snackulator</Text>
+        <TouchableOpacity
+          style={styles.profileButton}
+          onPress={() => {
+            setShowProfileSetup(true);
+          }}
+        >
+          <Ionicons name="person-circle-outline" size={28} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      {currentView === 'dashboard' ? renderDashboard() : renderCameraView()}
+      
+      {renderProfileSetup()}
     </SafeAreaView>
   );
 }
@@ -595,8 +830,399 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  historyButton: {
+  profileButton: {
+    padding: 4,
+  },
+  
+  // Welcome styles
+  welcomeContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  welcomeContent: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'space-between',
+  },
+  welcomeHeader: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  iconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E3F2FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  welcomeSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  welcomeFeatures: {
+    marginVertical: 40,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  featureText: {
+    marginLeft: 20,
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  getStartedButton: {
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 10,
+    gap: 8,
+    marginBottom: 40,
+  },
+  getStartedText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  // Profile setup styles
+  profileContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  profileContent: {
+    flex: 1,
+    padding: 20,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 0,
+    zIndex: 1,
+    padding: 10,
+  },
+  profileTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    marginTop: 20,
+  },
+  profileSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 30,
+  },
+  inputGroup: {
+    marginBottom: 25,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    backgroundColor: '#f8f9fa',
+  },
+  genderButtons: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  genderButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    gap: 8,
+  },
+  genderButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  heightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  heightInput: {
+    flex: 1,
+    marginRight: 0,
+  },
+  heightSeparator: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: -5,
+  },
+  genderButtonText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  genderButtonTextActive: {
+    color: 'white',
+  },
+  activityButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginRight: 10,
+  },
+  activityButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  activityButtonText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  activityButtonTextActive: {
+    color: 'white',
+  },
+  goalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  goalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  goalButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  goalButtonText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  goalButtonTextActive: {
+    color: 'white',
+  },
+  completeProfileButton: {
+    backgroundColor: '#34C759',
+    paddingVertical: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  completeProfileText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  // Dashboard styles
+  dashboardContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  dashboardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dateText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  calorieCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  calorieTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  calorieCircle: {
+    width: 180,
+    height: 180,
+    alignSelf: 'center',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  calorieCircleInner: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calorieNumber: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  calorieLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  progressRing: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 90,
+    borderWidth: 15,
+    borderColor: '#f0f0f0',
+  },
+  progressFill: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 90,
+    borderWidth: 15,
+    borderColor: '#007AFF',
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  calorieStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  calorieStat: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  overCalories: {
+    color: '#FF3B30',
+  },
+  foodListContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 20,
+  },
+  foodListTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 15,
+  },
+  emptyFoodList: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyFoodText: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 10,
+  },
+  foodItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  foodItemInfo: {
+    flex: 1,
+  },
+  foodItemName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  foodItemCalories: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginTop: 2,
+  },
+  removeButton: {
     padding: 8,
+  },
+  addFoodButton: {
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 10,
+    gap: 8,
+  },
+  addFoodButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  // Camera view styles
+  cameraContainer: {
+    flex: 1,
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  cameraTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
   },
   scrollView: {
     flex: 1,
@@ -667,21 +1293,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 15,
   },
-  analyzeButton: {
-    backgroundColor: '#007AFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: 10,
-    gap: 8,
-    marginBottom: 20,
-  },
-  analyzeButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   nutritionCard: {
     backgroundColor: 'white',
     borderRadius: 15,
@@ -718,6 +1329,7 @@ const styles = StyleSheet.create({
   },
   nutritionGrid: {
     gap: 15,
+    marginBottom: 20,
   },
   caloriesItem: {
     backgroundColor: '#FFF3E0',
@@ -734,11 +1346,6 @@ const styles = StyleSheet.create({
   macroRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-  },
-  microRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
     gap: 10,
   },
   nutritionItem: {
@@ -758,168 +1365,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  newAnalysisButton: {
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  newAnalysisText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  welcomeContainer: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  welcomeContent: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'space-between',
-  },
-  welcomeHeader: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E3F2FD',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  welcomeTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  welcomeSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  welcomeFeatures: {
-    marginVertical: 40,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 20,
-  },
-  featureText: {
-    marginLeft: 20,
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  featureDescription: {
-    fontSize: 14,
-    color: '#666',
-  },
-  welcomeFooter: {
-    marginBottom: 40,
-  },
-  permissionNote: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  getStartedButton: {
-    backgroundColor: '#007AFF',
+  logCaloriesButton: {
+    backgroundColor: '#34C759',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 10,
     gap: 8,
   },
-  getStartedText: {
+  logCaloriesText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  historyContainer: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  historyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  historyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  historyScroll: {
-    flex: 1,
-    padding: 20,
-  },
-  emptyHistory: {
-    alignItems: 'center',
-    marginTop: 100,
-  },
-  emptyHistoryText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#999',
-    marginTop: 15,
-  },
-  emptyHistorySubtext: {
-    fontSize: 14,
-    color: '#bbb',
-    marginTop: 5,
-  },
-  historyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  historyImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  historyContent: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  historyFoodName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  historyCalories: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginTop: 2,
-  },
-  historyDate: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    fontWeight: 'bold',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -936,24 +1394,10 @@ const styles = StyleSheet.create({
     padding: 30,
     borderRadius: 15,
     alignItems: 'center',
-    width: width * 0.8,
   },
   loadingText: {
     marginTop: 15,
     fontSize: 16,
     color: '#666',
-  },
-  progressBar: {
-    width: '100%',
-    height: 4,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 2,
-    marginTop: 15,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#007AFF',
-    width: '100%',
   },
 });
