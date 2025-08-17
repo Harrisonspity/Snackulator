@@ -291,7 +291,7 @@ export default function App() {
             <View style={styles.iconContainer}>
               <Ionicons name="nutrition" size={80} color="#007AFF" />
             </View>
-            <Text style={styles.welcomeTitle}>Nutrition Analyzer</Text>
+            <Text style={styles.welcomeTitle}>Snackulator</Text>
             <Text style={styles.welcomeSubtitle}>
               Created by Harrison Spitnale
             </Text>
@@ -494,7 +494,7 @@ export default function App() {
       {renderWelcomeScreen()}
       
       <View style={styles.header}>
-        <Text style={styles.title}>Nutrition Analyzer</Text>
+        <Text style={styles.title}>Snackulator</Text>
         <TouchableOpacity
           style={styles.historyButton}
           onPress={() => setShowHistory(true)}

@@ -1,4 +1,4 @@
-// AI Service Configuration for Nutrition Analyzer
+// AI Service Configuration for Snackulator
 // Created by Harrison Spitnale for Congressional App Challenge
 
 export const AI_SERVICES = {

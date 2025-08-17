@@ -1,13 +1,13 @@
-# Nutrition Analyzer 🍎
+# Snackulator 🍎
 
 **Congressional App Challenge 2025 Submission**  
 **By: Harrison Spitnale**  
 **High School: Bryan High School**  
 **Congressional District: Ninth Congressional District**
 
-## What is Nutrition Analyzer?
+## What is Snackulator?
 
-Nutrition Analyzer is a mobile app I created to help people make healthier food choices. Just take a photo of any food, and the app instantly tells you the nutritional information - calories, protein, carbs, fats, and more! It's like having a nutritionist in your pocket.
+Snackulator is a mobile app I created to help people make healthier food choices. Just take a photo of any food, and the app instantly tells you the nutritional information - calories, protein, carbs, fats, and more! It's like having a nutritionist in your pocket.
 
 ## Why I Made This App
 

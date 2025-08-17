@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Nutrition Analyzer",
-    "slug": "nutrition-analyzer",
+    "name": "Snackulator",
+    "slug": "snackulator",
     "owner": "spitnale",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.spitnalecasey.nutritionaianalyzer",
+      "bundleIdentifier": "com.spitnaleharrison.snackulator",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select food images for nutritional analysis.",
@@ -29,7 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.spitnalecasey.nutritionaianalyzer",
+      "package": "com.spitnaleharrison.snackulator",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
