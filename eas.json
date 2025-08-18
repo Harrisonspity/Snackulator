@@ -44,7 +44,8 @@
         "resourceClass": "medium"
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "preview"
+        "EXPO_PUBLIC_ENV": "preview",
+        "EXPO_PUBLIC_OPENAI_API_KEY": "${EXPO_PUBLIC_OPENAI_API_KEY}"
       }
     },
     "production": {
@@ -60,7 +61,8 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "production"
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_OPENAI_API_KEY": "${EXPO_PUBLIC_OPENAI_API_KEY}"
       }
     }
   },

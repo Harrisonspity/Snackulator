@@ -1,12 +1,14 @@
 // AI Service Configuration for Snackulator
 // Created by Harrison Spitnale for Congressional App Challenge
 
+import { ENV } from './env';
+
 export const AI_SERVICES = {
   // OpenAI GPT-4 Vision API - Main service for food recognition
   OPENAI: {
     name: 'OpenAI GPT-4 Vision',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || 'your-openai-api-key-here',
+    apiKey: ENV.openaiApiKey || 'your-openai-api-key-here',
     model: 'gpt-4-turbo',
     maxTokens: 1000,
   },
@@ -103,16 +105,16 @@ export const getRandomMockData = (imageUri) => {
 export const validateApiKeys = () => {
   const config = AI_SERVICES.OPENAI;
   
-  if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
+  if (!config.apiKey || config.apiKey === 'your-openai-api-key-here' || ENV.useMockData) {
     return {
       isValid: false,
-      message: 'OpenAI API key not configured. Using demo mode.',
+      message: `OpenAI API key not configured. Using demo mode. (Environment: ${ENV.environment})`,
     };
   }
   
   return {
     isValid: true,
-    message: 'API configured successfully',
+    message: `API configured successfully (Environment: ${ENV.environment})`,
   };
 };
 
