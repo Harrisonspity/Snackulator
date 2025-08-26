@@ -89,3 +89,9 @@ Thanks to:
 ---
 
 **Note:** This app was created as an educational project for the Congressional App Challenge. It demonstrates how technology can make healthy living more accessible to everyone.
+
+
+Helpful commands:
+npx expo prebuild --clean
+npx expo start --dev-client
+eas build --profile development-simulator --platform ios --local

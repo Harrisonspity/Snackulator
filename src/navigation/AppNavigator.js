@@ -19,6 +19,8 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Camera" component={CameraScreen} />
           </>
         ) : (
           <>

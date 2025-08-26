@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const loadUserProfile = async () => {
   const profile = await AsyncStorage.getItem('userProfile');
-  return profile ? JSON.parse(profile) : {};
+  return profile ? JSON.parse(profile) : null;
 };
 
 export const saveUserProfile = async (profile) => {

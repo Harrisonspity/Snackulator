@@ -4,10 +4,15 @@ import { loadDailyData, saveDailyData } from '../services/nutritionService';
 export const NutritionContext = createContext();
 
 export const NutritionProvider = ({ children }) => {
-  const [dailyCalories, setDailyCalories] = useState({});
-  const [dailyFoods, setDailyFoods] = useState({});
+  const [dailyCalories, setDailyCalories] = useState(0);
+  const [dailyFoods, setDailyFoods] = useState([]);
   const [calorieGoal, setCalorieGoal] = useState(2000);
-  // ...other states...
+  
+  const resetNutritionData = () => {
+    setDailyCalories(0);
+    setDailyFoods([]);
+    setCalorieGoal(2000);
+  };
 
   useEffect(() => {
     loadDailyData().then(({ calories, foods }) => {
@@ -16,7 +21,9 @@ export const NutritionProvider = ({ children }) => {
     });
   }, []);
 
-  // ...handlers for logging/removing food...
+  useEffect(() => {
+    saveDailyData(dailyCalories, dailyFoods);
+  }, [dailyCalories, dailyFoods]);
 
   return (
     <NutritionContext.Provider value={{
@@ -26,7 +33,7 @@ export const NutritionProvider = ({ children }) => {
       setDailyFoods,
       calorieGoal,
       setCalorieGoal,
-      // ...other values/handlers...
+      resetNutritionData,
     }}>
       {children}
     </NutritionContext.Provider>

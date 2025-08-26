@@ -32,6 +32,9 @@ const analyzeWithOpenAI = async (imageUri) => {
       throw new Error('OpenAI API key not configured. Please add EXPO_PUBLIC_OPENAI_API_KEY to your .env file');
     }
     
+    console.log('Using OpenAI API with model:', config.model);
+    console.log('API Key present:', !!config.apiKey);
+    
     const response = await axios.post(
       config.baseUrl,
       {
@@ -65,16 +68,52 @@ const analyzeWithOpenAI = async (imageUri) => {
     );
 
     const content = response.data.choices[0].message.content;
+    console.log('Raw OpenAI response:', content);
+    
     // Clean the response in case there's any markdown formatting
-    const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return JSON.parse(cleanedContent);
+    let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    // Additional cleaning for common issues
+    cleanedContent = cleanedContent.replace(/^[^{]*({.*})[^}]*$/s, '$1'); // Extract JSON object
+    
+    try {
+      const parsed = JSON.parse(cleanedContent);
+      console.log('Parsed nutrition data:', parsed);
+      return parsed;
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', cleanedContent);
+      console.error('Parse error:', parseError);
+      
+      // Return a fallback structure if parsing fails
+      return {
+        foodName: 'Food item',
+        calories: 0,
+        protein: '0g',
+        carbs: '0g',
+        fat: '0g',
+        fiber: '0g',
+        sugar: '0g',
+        confidence: 0.5,
+        error: 'Could not parse nutrition data'
+      };
+    }
   } catch (error) {
     console.error('OpenAI analysis error:', error.response?.data || error.message);
-    if (error.response?.status === 401) {
-      throw new Error('Invalid OpenAI API key. Please check your API key in the .env file');
-    } else if (error.response?.status === 429) {
-      throw new Error('OpenAI API rate limit exceeded. Please try again later');
-    } else if (error.message.includes('API key not configured')) {
+    
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data));
+      
+      if (error.response?.status === 401) {
+        throw new Error('Invalid OpenAI API key. Please check your API key in the .env file');
+      } else if (error.response?.status === 429) {
+        throw new Error('OpenAI API rate limit exceeded. Please try again later');
+      } else if (error.response?.status === 400) {
+        throw new Error('Invalid request to OpenAI. The image may be too large or in an unsupported format');
+      }
+    }
+    
+    if (error.message.includes('API key not configured')) {
       throw error;
     } else {
       throw new Error(`Failed to analyze image: ${error.message}`);
@@ -172,8 +211,11 @@ const analyzeWithCalorieMama = async (imageUri) => {
 };
 
 // Main analysis function
-export const analyzeFoodImage = async (imageUri, service = 'MOCK') => {
+export const analyzeFoodImage = async (imageData, service = 'MOCK') => {
   try {
+    // Handle both image objects and URI strings
+    const imageUri = typeof imageData === 'string' ? imageData : imageData.uri;
+    
     let result;
     
     switch (service.toUpperCase()) {

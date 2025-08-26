@@ -4,13 +4,17 @@ import { loadUserProfile, saveUserProfile, checkOnboardingStatus } from '../serv
 export const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  const [userProfile, setUserProfile] = useState({});
+  const [userProfile, setUserProfile] = useState(null);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
 
   useEffect(() => {
     checkOnboardingStatus().then(setHasCompletedOnboarding);
-    loadUserProfile().then(setUserProfile);
+    loadUserProfile().then(profile => {
+      if (profile) {
+        setUserProfile(profile);
+      }
+    });
   }, []);
 
   const handleProfileComplete = async () => {
@@ -24,6 +28,7 @@ export const UserProvider = ({ children }) => {
       userProfile,
       setUserProfile,
       hasCompletedOnboarding,
+      setHasCompletedOnboarding,
       showProfileSetup,
       setShowProfileSetup,
       handleProfileComplete,
