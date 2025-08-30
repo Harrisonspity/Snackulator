@@ -87,13 +87,19 @@ const CameraScreen = ({ navigation }) => {
   };
 
   const saveFood = () => {
-    if (!nutritionData) return;
+    try {
+      if (!nutritionData) return;
+      console.log(nutritionData);
+      const newFood = {
+        ...nutritionData,
+        timestamp: new Date().toISOString(),
+        imageUri: image.uri,
+      };
+    } catch (error) {
+      console.error('Save food error:', error);
+      Alert.alert('Error', 'Failed to save food. Please try again.');
+    }
 
-    const newFood = {
-      ...nutritionData,
-      timestamp: new Date().toISOString(),
-      imageUri: image.uri,
-    };
 
     // Update daily totals
     setDailyCalories(dailyCalories + nutritionData.calories);

@@ -75,7 +75,7 @@ const DashboardScreen = ({ navigation }) => {
   return (
     <GradientBackground variant="premium">
       <SafeAreaView style={styles.container}>
-        <ScrollView style={styles.content}>
+        <ScrollView style={styles.content} contentContainerStyle={{ paddingTop: 20, paddingBottom: 100 }}>
         {/* Enhanced Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerContent}>

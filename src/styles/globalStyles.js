@@ -5,7 +5,7 @@ const globalStyles = StyleSheet.create({
   // Example:
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1a1a1a',
   },
   // ...rest of the styles...
 });
