@@ -65,7 +65,8 @@
         {
           "cameraPermission": "This app needs access to your camera to take photos of food for nutritional analysis."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
