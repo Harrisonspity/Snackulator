@@ -40,9 +40,9 @@ const ProfileSetupScreen = ({ navigation }) => {
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       setUserProfile(profile);
       
-      // For existing users editing profile, just go back
+      // For existing users editing profile, navigate to dashboard
       if (hasCompletedOnboarding) {
-        navigation.goBack();
+        navigation.navigate('Dashboard');
       } else {
         // For new users, set onboarding complete which will trigger navigation
         setHasCompletedOnboarding(true);

@@ -87,27 +87,28 @@ const CameraScreen = ({ navigation }) => {
   };
 
   const saveFood = () => {
+    if (!nutritionData) return;
+    
     try {
-      if (!nutritionData) return;
       console.log(nutritionData);
       const newFood = {
         ...nutritionData,
         timestamp: new Date().toISOString(),
         imageUri: image.uri,
       };
+
+      // Update daily totals
+      setDailyCalories(dailyCalories + nutritionData.calories);
+      setDailyFoods([...dailyFoods, newFood]);
     } catch (error) {
       console.error('Save food error:', error);
       Alert.alert('Error', 'Failed to save food. Please try again.');
+      return;
     }
-
-
-    // Update daily totals
-    setDailyCalories(dailyCalories + nutritionData.calories);
-    setDailyFoods([...dailyFoods, newFood]);
 
     // Navigate back to dashboard
     Alert.alert('Success', 'Food logged successfully!', [
-      { text: 'OK', onPress: () => navigation.goBack() }
+      { text: 'OK', onPress: () => navigation.navigate('Dashboard') }
     ]);
   };
 
@@ -136,7 +137,7 @@ const CameraScreen = ({ navigation }) => {
     <GradientBackground variant="mesh">
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('Dashboard')}>
           <Ionicons name="arrow-back" size={28} color="#1E88E5" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Food</Text>

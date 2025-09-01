@@ -7,22 +7,6 @@ export const AI_SERVICES = {
     model: 'gpt-4o-mini',  // Using GPT-4o mini which supports vision and is more cost-effective
     maxTokens: 500,
   },
-  GOOGLE_VISION: {
-    name: 'Google Cloud Vision',
-    baseUrl: 'https://vision.googleapis.com/v1/images:annotate',
-    apiKey: process.env.EXPO_PUBLIC_GOOGLE_API_KEY || 'your-google-api-key-here',
-  },
-  CALORIE_MAMA: {
-    name: 'Calorie Mama',
-    baseUrl: 'https://api.caloriemama.ai/v1/analyze',
-    apiKey: process.env.EXPO_PUBLIC_CALORIE_MAMA_API_KEY || 'your-calorie-mama-api-key-here',
-  },
-  NUTRITIONIX: {
-    name: 'Nutritionix',
-    baseUrl: 'https://trackapi.nutritionix.com/v2',
-    appId: process.env.EXPO_PUBLIC_NUTRITIONIX_APP_ID || 'your-nutritionix-app-id',
-    appKey: process.env.EXPO_PUBLIC_NUTRITIONIX_APP_KEY || 'your-nutritionix-app-key',
-  },
 };
 
 // Prompt for AI services to analyze food images

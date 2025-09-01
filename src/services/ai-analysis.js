@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { AI_SERVICES, NUTRITION_PROMPT, getRandomMockData } from '../config/ai-service';
 
-// Convert image URI to base64 for API calls
+// Convert the uploaded image to base64 for API calls to anilize the image
 const imageToBase64 = async (imageUri) => {
   try {
     const response = await fetch(imageUri);
@@ -26,15 +26,15 @@ const analyzeWithOpenAI = async (imageUri) => {
   try {
     const base64Image = await imageToBase64(imageUri);
     const config = AI_SERVICES.OPENAI;
-    
+
     // Check if API key is configured
     if (!config.apiKey || config.apiKey === 'your-openai-api-key-here') {
       throw new Error('OpenAI API key not configured. Please add EXPO_PUBLIC_OPENAI_API_KEY to your .env file');
     }
-    
+
     console.log('Using OpenAI API with model:', config.model);
     console.log('API Key present:', !!config.apiKey);
-    
+
     const response = await axios.post(
       config.baseUrl,
       {
@@ -69,13 +69,13 @@ const analyzeWithOpenAI = async (imageUri) => {
 
     const content = response.data.choices[0].message.content;
     console.log('Raw OpenAI response:', content);
-    
+
     // Clean the response in case there's any markdown formatting
     let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
+
     // Additional cleaning for common issues
     cleanedContent = cleanedContent.replace(/^[^{]*({.*})[^}]*$/s, '$1'); // Extract JSON object
-    
+
     try {
       const parsed = JSON.parse(cleanedContent);
       console.log('Parsed nutrition data:', parsed);
@@ -83,7 +83,7 @@ const analyzeWithOpenAI = async (imageUri) => {
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', cleanedContent);
       console.error('Parse error:', parseError);
-      
+
       // Return a fallback structure if parsing fails
       return {
         foodName: 'Food item',
@@ -99,11 +99,11 @@ const analyzeWithOpenAI = async (imageUri) => {
     }
   } catch (error) {
     console.error('OpenAI analysis error:', error.response?.data || error.message);
-    
+
     if (error.response) {
       console.error('Response status:', error.response.status);
       console.error('Response data:', JSON.stringify(error.response.data));
-      
+
       if (error.response?.status === 401) {
         throw new Error('Invalid OpenAI API key. Please check your API key in the .env file');
       } else if (error.response?.status === 429) {
@@ -112,7 +112,7 @@ const analyzeWithOpenAI = async (imageUri) => {
         throw new Error('Invalid request to OpenAI. The image may be too large or in an unsupported format');
       }
     }
-    
+
     if (error.message.includes('API key not configured')) {
       throw error;
     } else {
@@ -126,7 +126,7 @@ const analyzeWithGoogleVision = async (imageUri) => {
   try {
     const base64Image = await imageToBase64(imageUri);
     const config = AI_SERVICES.GOOGLE_VISION;
-    
+
     const response = await axios.post(
       `${config.baseUrl}?key=${config.apiKey}`,
       {
@@ -153,10 +153,10 @@ const analyzeWithGoogleVision = async (imageUri) => {
     // Process Google Vision results and map to nutrition data
     const labels = response.data.responses[0].labelAnnotations || [];
     const webEntities = response.data.responses[0].webDetection?.webEntities || [];
-    
+
     // This is a simplified mapping - in a real app, you'd use a nutrition database
     const foodName = labels[0]?.description || webEntities[0]?.description || 'Unknown Food';
-    
+
     return {
       foodName,
       calories: Math.floor(Math.random() * 300) + 50, // Mock calories
@@ -178,7 +178,7 @@ const analyzeWithCalorieMama = async (imageUri) => {
   try {
     const base64Image = await imageToBase64(imageUri);
     const config = AI_SERVICES.CALORIE_MAMA;
-    
+
     const response = await axios.post(
       config.baseUrl,
       {
@@ -215,9 +215,9 @@ export const analyzeFoodImage = async (imageData, service = 'MOCK') => {
   try {
     // Handle both image objects and URI strings
     const imageUri = typeof imageData === 'string' ? imageData : imageData.uri;
-    
+
     let result;
-    
+
     switch (service.toUpperCase()) {
       case 'OPENAI':
         result = await analyzeWithOpenAI(imageUri);
@@ -259,7 +259,7 @@ export const getAvailableServices = () => {
 // Validate API keys
 export const validateApiKeys = () => {
   const validation = {};
-  
+
   Object.keys(AI_SERVICES).forEach(service => {
     const config = AI_SERVICES[service];
     validation[service] = {
@@ -268,6 +268,6 @@ export const validateApiKeys = () => {
       hasAppKey: !!(config.appKey && config.appKey !== `your-${service.toLowerCase()}-app-key`),
     };
   });
-  
+
   return validation;
 };
